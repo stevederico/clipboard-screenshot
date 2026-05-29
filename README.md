@@ -6,6 +6,24 @@ Automatically move macOS screenshots off your Desktop into a clean, timestamped 
 
 This exists because macOS still defaults to dumping every screenshot on your Desktop, and apparently no one has ever wanted that.
 
+## 🚀 Quick Start
+
+```bash
+git clone https://github.com/yourname/grok-screenshot.git
+cd grok-screenshot
+./install.sh
+```
+
+Take any screenshot (Cmd+Shift+4 or Cmd+Shift+5).
+
+- The screenshot is **moved** off your Desktop into `~/.grok/screenshots/`
+- It is placed on your clipboard (best effort)
+- You get a native macOS notification
+
+Open Grok and hit **Cmd+V**.
+
+That's it. No Homebrew. No extra tools. No configuration.
+
 ## Features
 
 ### Desktop Cleanup
@@ -42,13 +60,7 @@ Solves the eternal complaint: "Why does macOS still save screenshots to the Desk
 
 ## Installation
 
-```bash
-git clone https://github.com/yourname/grok-screenshot.git
-cd grok-screenshot
-./install.sh
-```
-
-That's it.
+See the Quick Start above. The `./install.sh` script handles everything.
 
 ## How it works
 
