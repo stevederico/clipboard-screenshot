@@ -1,13 +1,14 @@
 #!/bin/zsh
-# grok-screenshot watcher
+# screenshot-mover
 # Pure launchd-based macOS screenshot archiver + best-effort clipboard copier.
 # Zero dependencies.
 
 set -euo pipefail
 unsetopt nomatch 2>/dev/null || true
 
-GROK_DIR="${GROK_HOME:-$HOME/.grok}"
-SS_DIR="$GROK_DIR/screenshots"
+# Default storage location for moved screenshots.
+# Can be overridden with SCREENSHOTS_DIR environment variable.
+SS_DIR="${SCREENSHOTS_DIR:-$HOME/Screenshots}"
 mkdir -p "$SS_DIR"
 STATE_FILE="$SS_DIR/.last-processed"
 LOG_FILE="$SS_DIR/watcher.log"
@@ -106,10 +107,10 @@ process_file() {
 
   if put_image_on_clipboard "$dest"; then
     log "On clipboard: $name"
-    show_notification "Screenshot ready for Grok" "Cmd+V in Grok • Moved to ~/.grok/screenshots"
+    show_notification "Screenshot ready" "Cmd+V • Moved to ~/Screenshots"
   else
     log "Clipboard failed for $name"
-    show_notification "Screenshot moved" "File: ~/.grok/screenshots/$(basename "$dest")"
+    show_notification "Screenshot moved" "File: ~/Screenshots/$(basename "$dest")"
   fi
 
   echo "$name" > "$STATE_FILE"

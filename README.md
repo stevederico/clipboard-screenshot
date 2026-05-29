@@ -1,6 +1,6 @@
-# grok-screenshot
+# screenshot-mover
 
-Automatically move macOS screenshots off your Desktop into a clean, timestamped archive — and (best-effort) put them on your clipboard.
+Automatically move macOS screenshots off your Desktop into a clean, timestamped folder — and (best-effort) put them on your clipboard.
 
 **Zero dependencies.** No Homebrew, no fswatch, no third-party binaries.
 
@@ -16,11 +16,11 @@ cd grok-screenshot
 
 Take any screenshot (Cmd+Shift+4 or Cmd+Shift+5).
 
-- The screenshot is **moved** off your Desktop into `~/.grok/screenshots/`
+- The screenshot is **moved** off your Desktop into `~/Screenshots/`
 - It is placed on your clipboard (best effort)
 - You get a native macOS notification
 
-Open Grok and hit **Cmd+V**.
+Hit **Cmd+V** in any app that supports images.
 
 That's it. No Homebrew. No extra tools. No configuration.
 
@@ -31,7 +31,7 @@ That's it. No Homebrew. No extra tools. No configuration.
 - No more screenshot clutter
 
 ### Organized Archive
-- Saves every screenshot into `~/.grok/screenshots/` with a clean, sortable timestamp prefix
+- Saves every screenshot into `~/Screenshots/` with a clean, sortable timestamp prefix
 - Example filename: `2026-05-29_13-41-22_Screenshot 2026-05-29 at 1.41.15 PM.png`
 
 ### Clipboard Integration (Best Effort)
@@ -54,8 +54,9 @@ That's it. No Homebrew. No extra tools. No configuration.
 - Pure native macOS tools: `launchd`, `zsh`, and `osascript`
 - No Homebrew, no fswatch, no extra binaries
 
-### Grok Integration
-- Includes an optional skill (`skill/SKILL.md`) so you can ask Grok about your recent screenshots
+### LLM Integration
+- Includes an optional skill for Grok users (`skill/SKILL.md`) so you can ask Grok about your recent screenshots
+- Works great with any LLM or app that supports pasting images from the clipboard (Claude, ChatGPT, Cursor, etc.)
 
 Solves the eternal complaint: "Why does macOS still save screenshots to the Desktop?"
 
@@ -67,7 +68,7 @@ See the Quick Start above. The `./install.sh` script handles everything.
 
 1. A lightweight `launchd` agent (using `WatchPaths`) watches your current screenshot folder(s).
 2. When a new screenshot is detected, the watcher script runs.
-3. It validates the file, then **moves** it into `~/.grok/screenshots/` with a timestamped name.
+3. It validates the file, then **moves** it into `~/Screenshots/` with a timestamped name.
 4. It attempts to copy the image to your clipboard.
 5. You receive a native macOS notification.
 
@@ -97,13 +98,13 @@ Then re-run `./install.sh`.
 
 ```bash
 # View logs
-tail -f ~/.grok/screenshots/watcher.log
+tail -f ~/Screenshots/watcher.log
 
 # Stop the watcher
-launchctl unload ~/Library/LaunchAgents/com.grok-screenshot.watcher.plist
+launchctl unload ~/Library/LaunchAgents/com.screenshot-watcher.plist
 
 # Start it again
-launchctl load -w ~/Library/LaunchAgents/com.grok-screenshot.watcher.plist
+launchctl load -w ~/Library/LaunchAgents/com.screenshot-watcher.plist
 ```
 
 ## Uninstall
@@ -115,7 +116,7 @@ cd grok-screenshot
 
 ## Grok Skill (Optional)
 
-There's also a small skill included in `skill/SKILL.md` that lets Grok reference your moved screenshots easily.
+There's also a small skill included in `skill/SKILL.md` (for Grok users) that lets you easily reference your moved screenshots inside Grok conversations. The core tool works with any application.
 
 ## Philosophy
 

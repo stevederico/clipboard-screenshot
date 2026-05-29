@@ -1,14 +1,14 @@
 #!/bin/zsh
-# Uninstall grok-screenshot
+# Uninstall screenshot-mover
 
 set -euo pipefail
 
-LABEL="com.grok.screenshot-watcher"
+LABEL="com.screenshot-watcher"
 PLIST_NAME="${LABEL}.plist"
 PLIST_DEST="$HOME/Library/LaunchAgents/$PLIST_NAME"
-SS_DIR="${GROK_HOME:-$HOME/.grok}/screenshots"
+SS_DIR="${SCREENSHOTS_DIR:-$HOME/Screenshots}"
 
-echo "==> Uninstalling grok-screenshot watcher"
+echo "==> Uninstalling screenshot-mover"
 
 if [[ -f "$PLIST_DEST" ]]; then
   launchctl unload -w "$PLIST_DEST" 2>/dev/null || true

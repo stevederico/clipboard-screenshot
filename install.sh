@@ -1,17 +1,16 @@
 #!/bin/zsh
-# Installer for grok-screenshot
+# Installer for screenshot-mover
 # Creates the launch agent with correct paths for the current user.
 
 set -euo pipefail
 
-GROK_DIR="${GROK_HOME:-$HOME/.grok}"
-SS_DIR="$GROK_DIR/screenshots"
+SS_DIR="${SCREENSHOTS_DIR:-$HOME/Screenshots}"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
-LABEL="com.grok.screenshot-watcher"
+LABEL="com.screenshot-watcher"
 PLIST_NAME="${LABEL}.plist"
 PLIST_DEST="$LAUNCH_AGENTS/$PLIST_NAME"
 
-echo "==> Installing grok-screenshot watcher (zero dependencies)"
+echo "==> Installing screenshot-mover (zero dependencies)"
 
 mkdir -p "$HOME/Desktop" "$HOME/Pictures/Screenshots"
 mkdir -p "$SS_DIR"
@@ -55,8 +54,8 @@ cat > "$PLIST_DEST" <<EOF
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
-        <key>GROK_HOME</key>
-        <string>${GROK_DIR}</string>
+        <key>SCREENSHOTS_DIR</key>
+        <string>${SS_DIR}</string>
     </dict>
 
     <key>StandardOutPath</key>
