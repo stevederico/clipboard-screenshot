@@ -9,7 +9,7 @@ This exists because macOS still defaults to dumping every screenshot on your Des
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/yourname/grok-screenshot.git
+git clone https://github.com/stevederico/grok-screenshot.git
 cd grok-screenshot
 ./install.sh
 ```
