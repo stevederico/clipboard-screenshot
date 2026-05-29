@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.grok.screenshot-watcher</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>PATH_TO_WATCHER/watcher.sh</string>
+    </array>
+
+    <key>WatchPaths</key>
+    <array>
+        <string>~/Desktop</string>
+        <string>~/Pictures/Screenshots</string>
+    </array>
+
+    <key>ThrottleInterval</key>
+    <integer>1</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+    <key>KeepAlive</key>
+    <false/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
+        <key>GROK_HOME</key>
+        <string>~/.grok</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>~/.grok/screenshots/watcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>~/.grok/screenshots/watcher.log</string>
+</dict>
+</plist>
