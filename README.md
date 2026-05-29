@@ -36,7 +36,8 @@ That's it. No Homebrew. No extra tools. No configuration.
 
 ### Clipboard Integration (Best Effort)
 - Tries to put the image on your clipboard automatically so you can Cmd+V right away
-- Uses a robust AppleScript method that handles macOS's weird filename characters (like the narrow no-break space in " PM")
+- Uses multiple AppleScript strategies + retries to improve success rate
+- Handles macOS's weird filename characters (like the narrow no-break space in " PM")
 
 ### Native Notifications
 - Shows a macOS notification when a screenshot is successfully processed

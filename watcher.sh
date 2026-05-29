@@ -28,26 +28,51 @@ put_image_on_clipboard() {
   local file="$1"
   [[ -f "$file" ]] || return 1
 
-  # Pass path as argument to avoid quoting issues with special characters
-  # in macOS screenshot filenames (e.g. narrow no-break space in " PM").
-  local result
-  result=$(osascript -e '
-    on run {thePath}
-      try
-        set theFile to POSIX file thePath
-        set the clipboard to (read theFile as «class PNGf»)
-        return "ok"
-      on error err
-        return "fail: " & err
-      end try
-    end run' "$file" 2>&1)
+  local max_attempts=3
+  local delay=0.35
 
-  if [[ "$result" == "ok" ]]; then
-    return 0
-  else
-    log "Clipboard error: $result"
-    return 1
-  fi
+  for attempt in {1..$max_attempts}; do
+    # Strategy 1: Use System Events + argument passing (often most reliable)
+    local res1
+    res1=$(osascript -e '
+      on run {thePath}
+        try
+          tell application "System Events"
+            set the clipboard to (read (POSIX file thePath) as «class PNGf»)
+          end tell
+          return "ok"
+        on error err
+          return "fail1: " & err
+        end try
+      end run' "$file" 2>&1)
+
+    if [[ "$res1" == "ok" ]]; then
+      return 0
+    fi
+
+    # Strategy 2: Alternative phrasing ("PNG picture")
+    local res2
+    res2=$(osascript -e '
+      on run {thePath}
+        try
+          set the clipboard to (read (POSIX file thePath) as PNG picture)
+          return "ok"
+        on error err
+          return "fail2: " & err
+        end try
+      end run' "$file" 2>&1)
+
+    if [[ "$res2" == "ok" ]]; then
+      return 0
+    fi
+
+    if [[ $attempt -lt $max_attempts ]]; then
+      sleep $delay
+    fi
+  done
+
+  log "Clipboard failed after $max_attempts attempts. Last errors: $res1 | $res2"
+  return 1
 }
 
 show_notification() {
