@@ -1,5 +1,5 @@
 #!/bin/zsh
-# screenshot-mover
+# clipboard-screenshot
 # Pure launchd-based macOS screenshot archiver + best-effort clipboard copier.
 # Zero dependencies.
 

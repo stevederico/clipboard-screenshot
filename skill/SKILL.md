@@ -5,7 +5,7 @@ description: Access automatically moved macOS screenshots. Use when the user men
 
 # Screenshot Archive Skill
 
-You have access to screenshots that have been automatically moved off the user's Desktop by screenshot-mover.
+You have access to screenshots that have been automatically moved off the user's Desktop by clipboard-screenshot.
 
 ## Location
 `~/Screenshots/` (or set SCREENSHOTS_DIR)

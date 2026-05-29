@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.screenshot-watcher</string>
+    <string>com.clipboard-screenshot.watcher</string>
 
     <key>ProgramArguments</key>
     <array>

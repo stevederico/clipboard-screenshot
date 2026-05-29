@@ -1,6 +1,6 @@
-# screenshot-mover
+# clipboard-screenshot
 
-Automatically move macOS screenshots off your Desktop into a clean, timestamped folder — and (best-effort) put them on your clipboard.
+Automatically move macOS screenshots off your Desktop into a clean, timestamped folder — and put them on your clipboard.
 
 **Zero dependencies.** No Homebrew, no fswatch, no third-party binaries.
 
@@ -9,8 +9,8 @@ This exists because macOS still defaults to dumping every screenshot on your Des
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/stevederico/grok-screenshot.git
-cd grok-screenshot
+git clone https://github.com/stevederico/clipboard-screenshot.git
+cd clipboard-screenshot
 ./install.sh
 ```
 
@@ -101,16 +101,16 @@ Then re-run `./install.sh`.
 tail -f ~/Screenshots/watcher.log
 
 # Stop the watcher
-launchctl unload ~/Library/LaunchAgents/com.screenshot-watcher.plist
+launchctl unload ~/Library/LaunchAgents/com.clipboard-screenshot.watcher.plist
 
 # Start it again
-launchctl load -w ~/Library/LaunchAgents/com.screenshot-watcher.plist
+launchctl load -w ~/Library/LaunchAgents/com.clipboard-screenshot.watcher.plist
 ```
 
 ## Uninstall
 
 ```bash
-cd grok-screenshot
+cd clipboard-screenshot
 ./uninstall.sh
 ```
 

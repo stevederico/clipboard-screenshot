@@ -1,14 +1,14 @@
 #!/bin/zsh
-# Uninstall screenshot-mover
+# Uninstall clipboard-screenshot
 
 set -euo pipefail
 
-LABEL="com.screenshot-watcher"
+LABEL="com.clipboard-screenshot.watcher"
 PLIST_NAME="${LABEL}.plist"
 PLIST_DEST="$HOME/Library/LaunchAgents/$PLIST_NAME"
 SS_DIR="${SCREENSHOTS_DIR:-$HOME/Screenshots}"
 
-echo "==> Uninstalling screenshot-mover"
+echo "==> Uninstalling clipboard-screenshot"
 
 if [[ -f "$PLIST_DEST" ]]; then
   launchctl unload -w "$PLIST_DEST" 2>/dev/null || true

@@ -1,16 +1,16 @@
 #!/bin/zsh
-# Installer for screenshot-mover
+# Installer for clipboard-screenshot
 # Creates the launch agent with correct paths for the current user.
 
 set -euo pipefail
 
 SS_DIR="${SCREENSHOTS_DIR:-$HOME/Screenshots}"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
-LABEL="com.screenshot-watcher"
+LABEL="com.clipboard-screenshot.watcher"
 PLIST_NAME="${LABEL}.plist"
 PLIST_DEST="$LAUNCH_AGENTS/$PLIST_NAME"
 
-echo "==> Installing screenshot-mover (zero dependencies)"
+echo "==> Installing clipboard-screenshot (zero dependencies)"
 
 mkdir -p "$HOME/Desktop" "$HOME/Pictures/Screenshots"
 mkdir -p "$SS_DIR"
