@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template only. install.sh generates the live plist with absolute paths. -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
@@ -7,34 +8,47 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>PATH_TO_WATCHER/watcher.sh</string>
+        <string>/bin/zsh</string>
+        <string>PATH_TO_SCREENSHOTS_DIR/watcher.sh</string>
     </array>
 
     <key>WatchPaths</key>
     <array>
-        <string>~/Desktop</string>
-        <string>~/Pictures/Screenshots</string>
+        <string>PATH_TO_SCREENSHOTS_DIR/Incoming</string>
     </array>
 
     <key>ThrottleInterval</key>
     <integer>1</integer>
 
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+
     <key>RunAtLoad</key>
-    <false/>
+    <true/>
     <key>KeepAlive</key>
     <false/>
+
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
-        <key>GROK_HOME</key>
-        <string>~/.grok</string>
+        <key>SCREENSHOTS_DIR</key>
+        <string>PATH_TO_SCREENSHOTS_DIR</string>
+        <key>SCREENSHOTS_INBOX</key>
+        <string>PATH_TO_SCREENSHOTS_DIR/Incoming</string>
+        <key>HOME</key>
+        <string>PATH_TO_HOME</string>
     </dict>
 
     <key>StandardOutPath</key>
-    <string>~/.grok/screenshots/watcher.log</string>
+    <string>PATH_TO_SCREENSHOTS_DIR/watcher.log</string>
     <key>StandardErrorPath</key>
-    <string>~/.grok/screenshots/watcher.log</string>
+    <string>PATH_TO_SCREENSHOTS_DIR/watcher.log</string>
 </dict>
 </plist>
