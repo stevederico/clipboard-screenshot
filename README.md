@@ -12,19 +12,23 @@ cd clipboard-screenshot
 ./install.sh
 ```
 
-`⌘⇧3` / `⌘⇧4` → `⌘V`.
+`⌘⇧3` / `⌘⇧4` → `⌘V` immediately.
 
-## Trigger (not a poll loop)
+## Why we disable the floating thumbnail
 
-macOS has no public “screenshot taken” API. What exists:
+That bottom-right preview **holds the PNG in limbo** until it dismisses — nothing reliable is on disk yet, so nothing can hit the clipboard. macOS exposes **no API** for that in-memory preview.
 
-| Mechanism | What it is |
+Install turns **off** `show-thumbnail` so the file writes to Desktop right away; we copy from there. Uninstall restores your prior setting.
+
+(⌘⌃⇧3 / ⌘⌃⇧4 = system “clipboard only”, no file — different feature.)
+
+## Trigger
+
+| Mechanism | Notes |
 |---|---|
-| **launchd `WatchPaths`** | FSEvents-backed — kernel tells launchd the folder changed. **This is what we use.** |
-| FSEvents (C/Swift) | Same events, lower level; needs a compiled binary |
-| Folder Actions | Finder-side hooks; flaky on modern macOS |
-
-We run once per Desktop change, copy the newest `Screenshot*`, exit. No 0.25s spin loop.
+| **launchd `WatchPaths`** | FSEvents when Desktop gets the new file — **what we use** |
+| FSEvents (C/Swift) | Same events, needs a binary |
+| “Screenshot taken” API | **Does not exist** publicly |
 
 ## Details
 

@@ -62,6 +62,24 @@ rmdir "$LEGACY_SS_DIR/Incoming" 2>/dev/null || true
 
 echo "==> Screenshot location: $CURRENT_LOC (unchanged by this tool)"
 
+# Floating thumbnail (bottom-right) DELAYS writing the PNG to disk until it
+# dismisses — so clipboard can't update until then. No public API to the
+# in-memory thumbnail. Disable it so the file hits Desktop immediately.
+THUMB_SAVE="$SUPPORT_DIR/previous-show-thumbnail"
+CUR_THUMB=$(defaults read com.apple.screencapture show-thumbnail 2>/dev/null || echo 1)
+if [[ ! -f "$THUMB_SAVE" ]]; then
+  echo "$CUR_THUMB" > "$THUMB_SAVE"
+fi
+if [[ "$CUR_THUMB" != "0" ]]; then
+  defaults write com.apple.screencapture show-thumbnail -bool false
+  launchctl kickstart -k "${DOMAIN}/com.apple.SystemUIServer.agent" 2>/dev/null \
+    || killall SystemUIServer 2>/dev/null || true
+  echo "==> Disabled floating screenshot thumbnail (was delaying Desktop write)"
+  echo "    Re-enable: defaults write com.apple.screencapture show-thumbnail -bool true"
+else
+  echo "==> Floating thumbnail already off"
+fi
+
 mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
 cp -f "./watcher.sh" "$APP_EXEC"
 chmod +x "$APP_EXEC"
@@ -84,9 +102,9 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.5.1</string>
+    <string>1.6.0</string>
     <key>CFBundleVersion</key>
-    <string>1.5.1</string>
+    <string>1.6.0</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
@@ -190,7 +208,7 @@ echo "App:     $APP_BUNDLE"
 echo "Trigger: WatchPaths on ${watch_paths[*]} (FS event — not polling)"
 echo "Logs:    $SUPPORT_DIR/watcher.log"
 echo
-echo "Screenshots stay put. New ones → clipboard."
+echo "Screenshots stay put. New ones → clipboard (immediate — no thumbnail wait)."
 echo "If asked: allow Automation for “${APP_NAME}” → System Events."
 echo
 echo "Stop:      launchctl bootout ${DOMAIN}/${LABEL}"

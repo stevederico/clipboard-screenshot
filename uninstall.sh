@@ -27,6 +27,20 @@ for p in "$PLIST_DEST" "$OLD_PLIST"; do
   fi
 done
 
+# Restore floating thumbnail if we turned it off
+THUMB_SAVE="$SUPPORT_DIR/previous-show-thumbnail"
+if [[ -f "$THUMB_SAVE" ]]; then
+  prev=$(cat "$THUMB_SAVE")
+  if [[ "$prev" == "0" ]]; then
+    defaults write com.apple.screencapture show-thumbnail -bool false
+  else
+    defaults write com.apple.screencapture show-thumbnail -bool true
+  fi
+  launchctl kickstart -k "${DOMAIN}/com.apple.SystemUIServer.agent" 2>/dev/null \
+    || killall SystemUIServer 2>/dev/null || true
+  echo "    Restored screenshot thumbnail setting ($prev)"
+fi
+
 rm -rf "$APP_BUNDLE" "$SUPPORT_DIR"
 # Legacy paths from earlier versions
 rm -rf "$LEGACY_SS_DIR/Clipboard Screenshot.app"
