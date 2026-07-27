@@ -1,33 +1,26 @@
 ---
 name: screenshots
-description: Access automatically moved macOS screenshots. Use when the user mentions recent screenshots, "what did I just capture", "the screenshot I took", or wants to discuss something visible on their screen.
+description: macOS screenshots land on the clipboard automatically. Use when the user mentions a recent screenshot, "what I just captured", or wants to paste/discuss the latest capture.
 ---
 
-# Screenshot Archive Skill
+# Screenshots (clipboard)
 
-You have access to screenshots that have been automatically moved off the user's Desktop by clipboard-screenshot.
-
-## Location
-`~/Screenshots/` (or set SCREENSHOTS_DIR)
-
-Files are named `YYYY-MM-DD_HH-MM-SS_originalname.png`.
+`clipboard-screenshot` copies each new screenshot to the system clipboard. **Files stay on Desktop** (or whatever macOS save location the user set). Nothing is archived.
 
 ## Usage
 
-1. List recent screenshots:
-   ```bash
-   ls -1t ~/Screenshots/*.png | head -15
-   ```
+1. User takes `⌘⇧3` / `⌘⇧4`
+2. After a moment they can `⌘V` (image is on the clipboard)
+3. File remains where macOS saved it — typically `~/Desktop/Screenshot ….png`
 
-2. Attach one using the normal file syntax:
-   ```
-   @~/Screenshots/2025-05-29_14-22-03_Screenshot.png
-   ```
+## Logs
 
-The watcher already tries to put the latest screenshot on the system clipboard, so the user can often just hit Cmd+V.
+```bash
+tail -f ~/Library/Application\ Support/com.stevederico.clipboard-screenshot/watcher.log
+```
 
-## Suggested Commands
+## Recent files on Desktop
 
-- "Show my last few screenshots"
-- "What was the last thing I screenshotted?"
-- "Describe the screenshot from a minute ago"
+```bash
+ls -1t ~/Desktop/Screenshot* 2>/dev/null | head -10
+```

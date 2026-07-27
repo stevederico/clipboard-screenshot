@@ -1,86 +1,76 @@
 #!/bin/zsh
 # Installer for clipboard-screenshot
-# Named .app + launch agent. Does NOT change your screenshot save location.
+# Clipboard only — does not move screenshots or change save location.
 
 set -euo pipefail
 setopt NULL_GLOB
 unsetopt NOMATCH
 
-SS_DIR="${SCREENSHOTS_DIR:-$HOME/Screenshots}"
+SUPPORT_DIR="${CLIPBOARD_SCREENSHOT_HOME:-$HOME/Library/Application Support/com.stevederico.clipboard-screenshot}"
 APP_NAME="Clipboard Screenshot"
-APP_BUNDLE="${SS_DIR}/${APP_NAME}.app"
+APP_BUNDLE="${SUPPORT_DIR}/${APP_NAME}.app"
 APP_EXEC="${APP_BUNDLE}/Contents/MacOS/clipboard-screenshot"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 LABEL="com.stevederico.clipboard-screenshot"
-PLIST_NAME="${LABEL}.plist"
-PLIST_DEST="$LAUNCH_AGENTS/$PLIST_NAME"
+PLIST_DEST="$LAUNCH_AGENTS/${LABEL}.plist"
 OLD_LABEL="com.clipboard-screenshot.watcher"
 OLD_PLIST="$LAUNCH_AGENTS/${OLD_LABEL}.plist"
 UID_NUM=$(id -u)
 DOMAIN="gui/${UID_NUM}"
-PREV_LOC_FILE="$SS_DIR/.previous-screencapture-location"
+LEGACY_SS_DIR="$HOME/Screenshots"
 
-echo "==> Installing ${APP_NAME}"
+echo "==> Installing ${APP_NAME} (clipboard only — files stay put)"
 
-mkdir -p "$SS_DIR" "$HOME/Desktop" "$HOME/Pictures/Screenshots"
-chmod 755 "$SS_DIR"
+mkdir -p "$SUPPORT_DIR" "$HOME/Desktop"
+chmod 755 "$SUPPORT_DIR"
 
-# If a previous install redirected screenshots to Incoming, put them back.
+# Restore screenshot location if an older install redirected it
 CURRENT_LOC=$(defaults read com.apple.screencapture location 2>/dev/null || echo "$HOME/Desktop")
 CURRENT_LOC=${CURRENT_LOC/#\~/$HOME}
 CURRENT_LOC=${CURRENT_LOC%/}
-
+PREV_LOC_FILE="$LEGACY_SS_DIR/.previous-screencapture-location"
 if [[ -f "$PREV_LOC_FILE" ]]; then
   RESTORE_TO=$(cat "$PREV_LOC_FILE")
   RESTORE_TO=${RESTORE_TO/#\~/$HOME}
   RESTORE_TO=${RESTORE_TO%/}
-elif [[ "$CURRENT_LOC" == "$SS_DIR/Incoming" || "$CURRENT_LOC" == "$SS_DIR" ]]; then
-  RESTORE_TO="$HOME/Desktop"
-else
-  RESTORE_TO=""
-fi
-
-if [[ -n "$RESTORE_TO" && "$CURRENT_LOC" != "$RESTORE_TO" ]]; then
-  defaults write com.apple.screencapture location "$RESTORE_TO"
-  launchctl kickstart -k "${DOMAIN}/com.apple.SystemUIServer.agent" 2>/dev/null \
-    || killall SystemUIServer 2>/dev/null \
-    || true
-  echo "==> Restored screenshot location → $RESTORE_TO"
-  CURRENT_LOC="$RESTORE_TO"
-fi
-rm -f "$PREV_LOC_FILE"
-
-# Drain leftover Incoming/ from the old approach into the archive
-if [[ -d "$SS_DIR/Incoming" ]]; then
-  drained=0
-  for f in "$SS_DIR/Incoming"/Screenshot*(N) "$SS_DIR/Incoming"/Screen\ Shot*(N); do
-    [[ -f "$f" ]] || continue
-    name=$(basename -- "$f")
-    dest="$SS_DIR/$(date +%Y-%m-%d_%H-%M-%S)_$name"
-    mv "$f" "$dest" 2>/dev/null && (( drained++ )) || true
-  done
-  rmdir "$SS_DIR/Incoming" 2>/dev/null || true
-  if (( drained > 0 )); then
-    echo "==> Drained $drained file(s) from old Incoming/ folder"
+  if [[ "$CURRENT_LOC" != "$RESTORE_TO" ]]; then
+    defaults write com.apple.screencapture location "$RESTORE_TO"
+    launchctl kickstart -k "${DOMAIN}/com.apple.SystemUIServer.agent" 2>/dev/null \
+      || killall SystemUIServer 2>/dev/null || true
+    CURRENT_LOC="$RESTORE_TO"
+    echo "==> Restored screenshot location → $CURRENT_LOC"
   fi
+  rm -f "$PREV_LOC_FILE"
+fi
+if [[ "$CURRENT_LOC" == "$LEGACY_SS_DIR/Incoming" || "$CURRENT_LOC" == "$LEGACY_SS_DIR" ]]; then
+  defaults write com.apple.screencapture location "$HOME/Desktop"
+  launchctl kickstart -k "${DOMAIN}/com.apple.SystemUIServer.agent" 2>/dev/null \
+    || killall SystemUIServer 2>/dev/null || true
+  CURRENT_LOC="$HOME/Desktop"
+  echo "==> Restored screenshot location → Desktop"
 fi
 
-echo "==> macOS screenshot location left as: $CURRENT_LOC"
+# Tear down legacy install bits under ~/Screenshots
+if [[ -d "$LEGACY_SS_DIR/Clipboard Screenshot.app" ]]; then
+  rm -rf "$LEGACY_SS_DIR/Clipboard Screenshot.app"
+  echo "==> Removed legacy app from ~/Screenshots"
+fi
+rm -f "$LEGACY_SS_DIR/watcher.sh" "$LEGACY_SS_DIR/watcher.log" \
+      "$LEGACY_SS_DIR/.last-processed" "$LEGACY_SS_DIR/.last-processed.tmp"
+rmdir "$LEGACY_SS_DIR/.watcher.lock" 2>/dev/null || true
+rmdir "$LEGACY_SS_DIR/Incoming" 2>/dev/null || true
 
-# Build named .app (so Login Items show "Clipboard Screenshot", not zsh)
+echo "==> Screenshot location: $CURRENT_LOC (unchanged by this tool)"
+
 mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
 cp -f "./watcher.sh" "$APP_EXEC"
 chmod +x "$APP_EXEC"
-cp -f "./watcher.sh" "$SS_DIR/watcher.sh"
-chmod +x "$SS_DIR/watcher.sh"
 
 cat > "${APP_BUNDLE}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>en</string>
     <key>CFBundleDisplayName</key>
     <string>${APP_NAME}</string>
     <key>CFBundleExecutable</key>
@@ -94,15 +84,15 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.2.0</string>
+    <string>1.3.0</string>
     <key>CFBundleVersion</key>
-    <string>1.2.0</string>
+    <string>1.3.0</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>${APP_NAME} lists your screenshot folder so new captures can be archived and copied to the clipboard.</string>
+    <string>${APP_NAME} detects new screenshots so they can be copied to the clipboard.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © Steve Derico</string>
 </dict>
@@ -114,14 +104,9 @@ xattr -dr com.apple.quarantine "$APP_BUNDLE" 2>/dev/null || true
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_BUNDLE" 2>/dev/null || true
 
 mkdir -p "$LAUNCH_AGENTS"
-
-# Remove old agent names
-for lbl in "$OLD_LABEL"; do
-  launchctl bootout "${DOMAIN}/${lbl}" 2>/dev/null || true
-done
+launchctl bootout "${DOMAIN}/${OLD_LABEL}" 2>/dev/null || true
 rm -f "$OLD_PLIST"
 
-# Watch whatever macOS actually uses + Desktop (common default)
 watch_paths=("$CURRENT_LOC")
 if [[ "$CURRENT_LOC" != "$HOME/Desktop" ]]; then
   watch_paths+=("$HOME/Desktop")
@@ -171,26 +156,21 @@ ${WATCH_XML}    </array>
     <dict>
         <key>PATH</key>
         <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
-        <key>SCREENSHOTS_DIR</key>
-        <string>${SS_DIR}</string>
         <key>HOME</key>
         <string>${HOME}</string>
+        <key>CLIPBOARD_SCREENSHOT_HOME</key>
+        <string>${SUPPORT_DIR}</string>
     </dict>
 
     <key>StandardOutPath</key>
-    <string>${SS_DIR}/watcher.log</string>
+    <string>${SUPPORT_DIR}/watcher.log</string>
     <key>StandardErrorPath</key>
-    <string>${SS_DIR}/watcher.log</string>
+    <string>${SUPPORT_DIR}/watcher.log</string>
 </dict>
 </plist>
 EOF
 
 chmod 644 "$PLIST_DEST"
-
-echo "==> App:   $APP_BUNDLE"
-echo "==> Agent: $PLIST_DEST"
-echo "    Watch: ${watch_paths[*]}"
-echo "    Archive: $SS_DIR"
 
 if launchctl print "${DOMAIN}/${LABEL}" &>/dev/null; then
   launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
@@ -202,19 +182,17 @@ if launchctl bootstrap "$DOMAIN" "$PLIST_DEST" 2>/dev/null; then
   echo "==> Bootstrapped (${DOMAIN}/${LABEL})"
 else
   launchctl load -w "$PLIST_DEST"
-  echo "==> Loaded (legacy)"
 fi
 
-# Warm System Events auth: may prompt once for Automation (System Events)
-# Running from the app binary path ties the prompt to "Clipboard Screenshot".
 "$APP_EXEC" || true
 
 echo
-echo "Screenshot save location is unchanged (currently: $CURRENT_LOC)."
-echo "New shots → moved to ~/Screenshots + clipboard."
+echo "App:     $APP_BUNDLE"
+echo "Watch:   ${watch_paths[*]}"
+echo "Logs:    $SUPPORT_DIR/watcher.log"
 echo
-echo "If macOS asks to allow Automation for “${APP_NAME}” → System Events, click OK."
+echo "Screenshots stay where macOS saves them. New ones land on the clipboard."
+echo "If asked: allow Automation for “${APP_NAME}” → System Events."
 echo
-echo "Logs:  tail -f $SS_DIR/watcher.log"
-echo "Stop:  launchctl bootout ${DOMAIN}/${LABEL}"
+echo "Stop:      launchctl bootout ${DOMAIN}/${LABEL}"
 echo "Uninstall: cd $(pwd) && ./uninstall.sh"

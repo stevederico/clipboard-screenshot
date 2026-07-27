@@ -1,27 +1,26 @@
 #!/bin/zsh
 # clipboard-screenshot
-# launchd agent: move new screenshots to ~/Screenshots + put on clipboard.
+# launchd agent: put new macOS screenshots on the clipboard.
+# Leaves files where macOS saved them (usually Desktop). No archive folder.
 # Zero dependencies: zsh + osascript + launchd.
 #
-# Why System Events for listing: launchd cannot readdir ~/Desktop (TCC
-# "Operation not permitted"). System Events can list it. Direct open/stat/mv
-# of a known path still works.
+# Listing Desktop: launchd cannot readdir ~/Desktop (TCC). System Events can.
+# open/stat of a known path still works.
 
 set -euo pipefail
 setopt NULL_GLOB EXTENDED_GLOB
 unsetopt NOMATCH
 
-SS_DIR="${SCREENSHOTS_DIR:-$HOME/Screenshots}"
-mkdir -p "$SS_DIR"
-STATE_FILE="$SS_DIR/.last-processed"
-LOG_FILE="$SS_DIR/watcher.log"
-LOCK_DIR="$SS_DIR/.watcher.lock"
+SUPPORT_DIR="${CLIPBOARD_SCREENSHOT_HOME:-$HOME/Library/Application Support/com.stevederico.clipboard-screenshot}"
+mkdir -p "$SUPPORT_DIR"
+STATE_FILE="$SUPPORT_DIR/last-processed"
+LOG_FILE="$SUPPORT_DIR/watcher.log"
+LOCK_DIR="$SUPPORT_DIR/watcher.lock"
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
 }
 
-# Serialize concurrent launchd fires
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   if [[ -d "$LOCK_DIR" ]]; then
     lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ))
@@ -45,13 +44,10 @@ get_ss_location() {
   [[ -d "$loc" ]] && echo "$loc" || echo "$HOME/Desktop"
 }
 
-# List screenshot files in dir. Prefer System Events (Desktop-safe under TCC).
-# Falls back to find for non-protected folders.
 list_screenshots() {
   local dir="$1"
-  local se_out find_out
 
-  se_out=$(osascript - "$dir" <<'APPLESCRIPT' 2>/dev/null || true
+  osascript - "$dir" <<'APPLESCRIPT' 2>/dev/null || true
 on run argv
   set dirPath to item 1 of argv
   set out to {}
@@ -73,18 +69,6 @@ on run argv
   return out as text
 end run
 APPLESCRIPT
-)
-
-  if [[ -n "${se_out//[$'\n']/}" ]]; then
-    print -r -- "$se_out"
-    return 0
-  fi
-
-  # find works for ~/Screenshots etc.; fails on Desktop under launchd TCC
-  find "$dir" -maxdepth 1 -type f \( \
-      -name 'Screenshot*' -o -name 'screenshot*' -o \
-      -name 'Screen Shot*' -o -name 'Screen shot*' \
-    \) -print 2>/dev/null || true
 }
 
 wait_for_stable_file() {
@@ -95,7 +79,6 @@ wait_for_stable_file() {
   local i size
 
   for i in {1..$max_wait}; do
-    # known absolute paths are readable even when readdir is blocked
     [[ -f "$file" ]] || { sleep 0.25; continue; }
     size=$(stat -f %z "$file" 2>/dev/null || echo 0)
     if (( size > 4096 )); then
@@ -199,55 +182,43 @@ mark_processed() {
   mv -f "${STATE_FILE}.tmp" "$STATE_FILE"
 }
 
-# Only process files modified in the last N minutes (avoid re-eating old Desktop junk)
 is_recent() {
   local file="$1"
   local mtime now age
   mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
   now=$(date +%s)
   age=$(( now - mtime ))
-  (( age >= 0 && age < 600 ))  # 10 minutes
+  (( age >= 0 && age < 600 ))
 }
 
 process_file() {
   local src="$1"
-  # strip trailing CR if any from AppleScript
   src=${src%$'\r'}
   [[ -f "$src" ]] || return 0
 
   local name
   name=$(basename -- "$src")
 
-  is_screenshot_name "$name" || { log "Skip (name): $name"; return 0; }
+  is_screenshot_name "$name" || return 0
   already_processed "$name" && return 0
-  is_recent "$src" || { log "Skip (old): $name"; return 0; }
+  is_recent "$src" || return 0
 
   if ! wait_for_stable_file "$src"; then
-    log "Skip (unstable/missing): $name"
+    log "Skip (unstable): $name"
     return 0
   fi
 
   [[ -f "$src" ]] || return 0
   already_processed "$name" && return 0
 
-  local dest="$SS_DIR/$(date +%Y-%m-%d_%H-%M-%S)_$name"
-  if [[ -e "$dest" ]]; then
-    dest="$SS_DIR/$(date +%Y-%m-%d_%H-%M-%S)_$$_$name"
-  fi
-
-  if ! mv "$src" "$dest" 2>/dev/null; then
-    log "mv failed (will retry): $name"
-    return 0
-  fi
-  log "Moved: $name → $(basename -- "$dest")"
-  mark_processed "$name"
-
-  if put_image_on_clipboard "$dest"; then
-    log "On clipboard: $(basename -- "$dest")"
-    show_notification "Screenshot Ready" "Cmd+V · Saved to ~/Screenshots"
+  # Leave the file where it is — clipboard only
+  if put_image_on_clipboard "$src"; then
+    mark_processed "$name"
+    log "On clipboard (left in place): $name"
+    show_notification "Screenshot Ready" "Cmd+V to paste"
   else
-    log "Clipboard failed for $(basename -- "$dest")"
-    show_notification "Screenshot Moved" "Clipboard failed · ~/Screenshots"
+    log "Clipboard failed: $name"
+    show_notification "Screenshot" "Clipboard copy failed"
   fi
 }
 
@@ -266,7 +237,6 @@ done <<EOF
 $(list_screenshots "$WATCH_DIR")
 EOF
 
-# If macOS location isn't Desktop but user still has strays / dual paths, also check Desktop
 if [[ "$WATCH_DIR" != "$HOME/Desktop" ]]; then
   while IFS= read -r local_line; do
     local_line=${local_line%$'\r'}
