@@ -1,7 +1,11 @@
 #!/bin/zsh
 # clipboard-screenshot — copy new screenshots to the clipboard (files stay put).
-# Triggered by launchd WatchPaths (FS event), not a poll loop.
+# Triggered by launchd WatchPaths (FS event).
 # Zero deps: zsh + osascript + launchd.
+#
+# Race we fix: WatchPaths often fires BEFORE the new PNG is visible to
+# System Events. Naively copying "newest" then re-pastes the *previous*
+# shot (or leaves it on the clipboard). We wait for mtime > last success.
 
 set -euo pipefail
 setopt NULL_GLOB EXTENDED_GLOB
@@ -10,6 +14,7 @@ unsetopt NOMATCH
 SUPPORT_DIR="${CLIPBOARD_SCREENSHOT_HOME:-$HOME/Library/Application Support/com.stevederico.clipboard-screenshot}"
 mkdir -p "$SUPPORT_DIR"
 STATE_FILE="$SUPPORT_DIR/last-processed"
+MTIME_FILE="$SUPPORT_DIR/last-mtime"
 LOG_FILE="$SUPPORT_DIR/watcher.log"
 LOCK_DIR="$SUPPORT_DIR/watcher.lock"
 
@@ -17,20 +22,24 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
 }
 
-# Serialize overlapping WatchPaths fires
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+# Overlapping fires: wait for the in-flight run (it may still be waiting for the new PNG)
+got_lock=0
+for _ in {1..60}; do
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    got_lock=1
+    break
+  fi
+  # Stale lock (>20s) — steal
   if [[ -d "$LOCK_DIR" ]]; then
     lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ))
-    if (( lock_age > 15 )); then
+    if (( lock_age > 20 )); then
       rmdir "$LOCK_DIR" 2>/dev/null || true
-      mkdir "$LOCK_DIR" 2>/dev/null || exit 0
-    else
-      exit 0
+      continue
     fi
-  else
-    exit 0
   fi
-fi
+  sleep 0.05
+done
+(( got_lock )) || exit 0
 trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
 
 get_ss_location() {
@@ -41,7 +50,7 @@ get_ss_location() {
   [[ -d "$loc" ]] && echo "$loc" || echo "$HOME/Desktop"
 }
 
-# System Events: newest Screenshot* (launchd cannot readdir Desktop under TCC)
+# Newest Screenshot* path via System Events (TCC-safe Desktop listing)
 newest_screenshot() {
   local dir="$1"
   osascript - "$dir" <<'APPLESCRIPT' 2>/dev/null || true
@@ -70,18 +79,16 @@ end run
 APPLESCRIPT
 }
 
+# Size > 4KB and stable across two samples (avoid mid-write)
 file_ready() {
-  local file="$1" size
+  local file="$1" a b
   [[ -f "$file" ]] || return 1
-  size=$(stat -f %z "$file" 2>/dev/null || echo 0)
-  if (( size > 4096 )); then
-    return 0
-  fi
-  # File may still be writing — one short retry (event can beat the write)
-  sleep 0.05
+  a=$(stat -f %z "$file" 2>/dev/null || echo 0)
+  (( a > 4096 )) || return 1
+  sleep 0.04
   [[ -f "$file" ]] || return 1
-  size=$(stat -f %z "$file" 2>/dev/null || echo 0)
-  (( size > 4096 ))
+  b=$(stat -f %z "$file" 2>/dev/null || echo 0)
+  (( b > 4096 && b == a ))
 }
 
 put_image_on_clipboard() {
@@ -122,14 +129,9 @@ notify() {
   osascript -e "display notification \"$2\" with title \"$1\"" &>/dev/null &
 }
 
-already_processed() {
-  local name="$1"
-  [[ -f "$STATE_FILE" ]] || return 1
-  grep -Fqx -- "$name" "$STATE_FILE" 2>/dev/null
-}
-
-mark_processed() {
-  local name="$1"
+mark_done() {
+  local name="$1" mtime="$2"
+  echo "$mtime" > "$MTIME_FILE"
   {
     echo "$name"
     grep -Fvx -- "$name" "$STATE_FILE" 2>/dev/null | head -20 || true
@@ -137,29 +139,35 @@ mark_processed() {
   mv -f "${STATE_FILE}.tmp" "$STATE_FILE"
 }
 
-is_recent() {
-  local file="$1" mtime now
-  mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
-  now=$(date +%s)
-  (( now - mtime >= 0 && now - mtime < 120 ))
-}
+# Core: wait for a screenshot NEWER than last success, then copy that only.
+try_copy_new() {
+  local watch src name mtime last attempt
+  local max_attempts=40   # * ~0.08s ≈ 3.2s for file to appear after event
+  local delay=0.08
 
-# WatchPaths can fire slightly before the PNG is fully written — brief rechecks.
-try_copy_newest() {
-  local watch src name attempt
+  last=$(cat "$MTIME_FILE" 2>/dev/null || echo 0)
+  # guard non-numeric
+  [[ "$last" == <-> ]] || last=0
 
   watch=$(get_ss_location)
-  for attempt in 1 2 3 4 5; do
+  log "event (watch=$watch last_mtime=$last)"
+
+  for attempt in {1..$max_attempts}; do
     src=$(newest_screenshot "$watch")
     src=${src//$'\r'/}
     src=${src//$'\n'/}
 
     if [[ -n "$src" && -f "$src" ]]; then
+      mtime=$(stat -f %m "$src" 2>/dev/null || echo 0)
       name=$(basename -- "$src")
-      if ! already_processed "$name" && is_recent "$src" && file_ready "$src"; then
+
+      # Key: only touch clipboard when this file is newer than last copy
+      if (( mtime > last )) && file_ready "$src"; then
+        # Re-stat after ready (thumbnail may rewrite)
+        mtime=$(stat -f %m "$src" 2>/dev/null || echo 0)
         if put_image_on_clipboard "$src"; then
-          mark_processed "$name"
-          log "clipboard: $name"
+          mark_done "$name" "$mtime"
+          log "clipboard: $name (mtime=$mtime attempt=$attempt)"
           notify "Screenshot Ready" "Cmd+V to paste"
           return 0
         fi
@@ -167,9 +175,11 @@ try_copy_newest() {
         return 1
       fi
     fi
-    sleep 0.1
+    sleep $delay
   done
+
+  log "no newer screenshot within timeout (last_mtime=$last)"
   return 0
 }
 
-try_copy_newest || true
+try_copy_new || true
