@@ -28,10 +28,13 @@ Install instead points `com.apple.screencapture location` at `~/Screenshots/Inco
 ## How it works
 
 1. `install.sh` sets screenshot location → `~/Screenshots/Incoming`
-2. launchd `WatchPaths` fires on that inbox
-3. `watcher.sh` waits for a stable file, moves it to `~/Screenshots/YYYY-MM-DD_HH-MM-SS_…`
-4. Copies PNG to the pasteboard via `osascript` (no System Events / Automation prompt)
-5. Notifies
+2. Installs **`Clipboard Screenshot.app`** (so System Settings shows that name, not `zsh`)
+3. launchd `WatchPaths` fires on the inbox
+4. App waits for a stable file, moves it to `~/Screenshots/YYYY-MM-DD_HH-MM-SS_…`
+5. Copies PNG to the pasteboard via `osascript` (no System Events / Automation prompt)
+6. Notifies
+
+Agent label: `com.stevederico.clipboard-screenshot`
 
 ## Control
 
@@ -39,7 +42,7 @@ Install instead points `com.apple.screencapture location` at `~/Screenshots/Inco
 tail -f ~/Screenshots/watcher.log
 
 # Stop
-launchctl bootout gui/$(id -u)/com.clipboard-screenshot.watcher
+launchctl bootout gui/$(id -u)/com.stevederico.clipboard-screenshot
 
 # Start again
 cd clipboard-screenshot && ./install.sh

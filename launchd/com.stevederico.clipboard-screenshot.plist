@@ -4,12 +4,11 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.clipboard-screenshot.watcher</string>
+    <string>com.stevederico.clipboard-screenshot</string>
 
     <key>ProgramArguments</key>
     <array>
-        <string>/bin/zsh</string>
-        <string>PATH_TO_SCREENSHOTS_DIR/watcher.sh</string>
+        <string>PATH_TO_SCREENSHOTS_DIR/Clipboard Screenshot.app/Contents/MacOS/clipboard-screenshot</string>
     </array>
 
     <key>WatchPaths</key>
