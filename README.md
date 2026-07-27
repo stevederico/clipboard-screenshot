@@ -1,5 +1,9 @@
 # clipboard-screenshot
 
+<p align="center">
+  <img src="assets/banner.jpg" alt="clipboard-screenshot — macOS screenshots to clipboard" width="100%">
+</p>
+
 **New macOS screenshots land on your clipboard automatically.** Files stay where macOS saved them (Desktop by default). No archive folder, no cloud, no Homebrew.
 
 `⌘⇧3` / `⌘⇧4` → `⌘V`
