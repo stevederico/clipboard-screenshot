@@ -1,6 +1,8 @@
 # clipboard-screenshot
 
-macOS screenshots → clipboard + `~/Screenshots/`. Zero dependencies.
+New macOS screenshots → `~/Screenshots/` + clipboard. **Does not change your screenshot save location.**
+
+Zero dependencies (launchd + zsh + osascript).
 
 ## Quick Start
 
@@ -12,49 +14,32 @@ cd clipboard-screenshot
 
 Take a screenshot (`⌘⇧3` / `⌘⇧4`):
 
-- Saved to `~/Screenshots/Incoming` (install redirects macOS away from Desktop)
-- Moved into `~/Screenshots/` with a timestamp prefix
-- Copied to the clipboard
-- Native notification: **Screenshot Ready**
+- File is **moved** off Desktop (or wherever macOS saves) into `~/Screenshots/`
+- Image is copied to the clipboard
+- Notification: **Screenshot Ready** → `⌘V` to paste
 
-`⌘V` to paste.
+## Why not just watch Desktop with `find`?
 
-## Why not watch Desktop?
+launchd agents get TCC-blocked on `~/Desktop` (`Operation not permitted` for directory listing). Listing goes through **System Events** instead; open/stat/mv of known paths still works.
 
-macOS TCC blocks launchd agents from **listing** `~/Desktop` (`Operation not permitted`). Watching Desktop is a dead end without Full Disk Access on `/bin/zsh`.
-
-Install instead points `com.apple.screencapture location` at `~/Screenshots/Incoming` (allowed for agents). Uninstall restores the previous location.
+If macOS prompts **Clipboard Screenshot → System Events** (Automation), allow it once.
 
 ## How it works
 
-1. `install.sh` sets screenshot location → `~/Screenshots/Incoming`
-2. Installs **`Clipboard Screenshot.app`** (so System Settings shows that name, not `zsh`)
-3. launchd `WatchPaths` fires on the inbox
-4. App waits for a stable file, moves it to `~/Screenshots/YYYY-MM-DD_HH-MM-SS_…`
-5. Copies PNG to the pasteboard via `osascript` (no System Events / Automation prompt)
-6. Notifies
-
-Agent label: `com.stevederico.clipboard-screenshot`
+1. Installs **`Clipboard Screenshot.app`** + launch agent `com.stevederico.clipboard-screenshot`
+2. Watches your current `com.apple.screencapture` location (default: Desktop)
+3. On new `Screenshot*` file: archive + clipboard
 
 ## Control
 
 ```bash
 tail -f ~/Screenshots/watcher.log
 
-# Stop
 launchctl bootout gui/$(id -u)/com.stevederico.clipboard-screenshot
 
-# Start again
-cd clipboard-screenshot && ./install.sh
-
-# Uninstall (restores prior screenshot location)
+cd clipboard-screenshot && ./install.sh   # reinstall
 ./uninstall.sh
 ```
-
-## Requirements
-
-- macOS (tested on Sequoia)
-- No Homebrew, no fswatch, no third-party binaries
 
 ## License
 

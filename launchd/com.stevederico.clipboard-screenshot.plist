@@ -13,7 +13,7 @@
 
     <key>WatchPaths</key>
     <array>
-        <string>PATH_TO_SCREENSHOTS_DIR/Incoming</string>
+        <string>PATH_TO_DESKTOP</string>
     </array>
 
     <key>ThrottleInterval</key>
@@ -39,8 +39,6 @@
         <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin</string>
         <key>SCREENSHOTS_DIR</key>
         <string>PATH_TO_SCREENSHOTS_DIR</string>
-        <key>SCREENSHOTS_INBOX</key>
-        <string>PATH_TO_SCREENSHOTS_DIR/Incoming</string>
         <key>HOME</key>
         <string>PATH_TO_HOME</string>
     </dict>

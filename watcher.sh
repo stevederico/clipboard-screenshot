@@ -1,18 +1,18 @@
 #!/bin/zsh
 # clipboard-screenshot
-# launchd-based macOS screenshot archiver + clipboard copier.
-# Zero dependencies: zsh + osascript + launchd only.
+# launchd agent: move new screenshots to ~/Screenshots + put on clipboard.
+# Zero dependencies: zsh + osascript + launchd.
 #
-# Screenshots must land in a non-TCC-protected folder (not Desktop/Documents).
-# install.sh points com.apple.screencapture location at ~/Screenshots/Incoming.
+# Why System Events for listing: launchd cannot readdir ~/Desktop (TCC
+# "Operation not permitted"). System Events can list it. Direct open/stat/mv
+# of a known path still works.
 
 set -euo pipefail
 setopt NULL_GLOB EXTENDED_GLOB
 unsetopt NOMATCH
 
 SS_DIR="${SCREENSHOTS_DIR:-$HOME/Screenshots}"
-INBOX_DIR="${SCREENSHOTS_INBOX:-$SS_DIR/Incoming}"
-mkdir -p "$SS_DIR" "$INBOX_DIR"
+mkdir -p "$SS_DIR"
 STATE_FILE="$SS_DIR/.last-processed"
 LOG_FILE="$SS_DIR/watcher.log"
 LOCK_DIR="$SS_DIR/.watcher.lock"
@@ -37,7 +37,56 @@ if ! mkdir "$LOCK_DIR" 2>/dev/null; then
 fi
 trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
 
-# Wait until file exists, is non-tiny, and size is stable.
+get_ss_location() {
+  local loc
+  loc=$(defaults read com.apple.screencapture location 2>/dev/null || echo "$HOME/Desktop")
+  loc=${loc/#\~/$HOME}
+  loc=${loc%/}
+  [[ -d "$loc" ]] && echo "$loc" || echo "$HOME/Desktop"
+}
+
+# List screenshot files in dir. Prefer System Events (Desktop-safe under TCC).
+# Falls back to find for non-protected folders.
+list_screenshots() {
+  local dir="$1"
+  local se_out find_out
+
+  se_out=$(osascript - "$dir" <<'APPLESCRIPT' 2>/dev/null || true
+on run argv
+  set dirPath to item 1 of argv
+  set out to {}
+  try
+    tell application "System Events"
+      set theFolder to folder dirPath
+      set theFiles to every file of theFolder
+      repeat with f in theFiles
+        set n to name of f as text
+        if n starts with "Screenshot" or n starts with "Screen Shot" or n starts with "screenshot" or n starts with "screen shot" then
+          set end of out to POSIX path of f
+        end if
+      end repeat
+    end tell
+  on error
+    return ""
+  end try
+  set AppleScript's text item delimiters to linefeed
+  return out as text
+end run
+APPLESCRIPT
+)
+
+  if [[ -n "${se_out//[$'\n']/}" ]]; then
+    print -r -- "$se_out"
+    return 0
+  fi
+
+  # find works for ~/Screenshots etc.; fails on Desktop under launchd TCC
+  find "$dir" -maxdepth 1 -type f \( \
+      -name 'Screenshot*' -o -name 'screenshot*' -o \
+      -name 'Screen Shot*' -o -name 'Screen shot*' \
+    \) -print 2>/dev/null || true
+}
+
 wait_for_stable_file() {
   local file="$1"
   local max_wait=40
@@ -46,6 +95,7 @@ wait_for_stable_file() {
   local i size
 
   for i in {1..$max_wait}; do
+    # known absolute paths are readable even when readdir is blocked
     [[ -f "$file" ]] || { sleep 0.25; continue; }
     size=$(stat -f %z "$file" 2>/dev/null || echo 0)
     if (( size > 4096 )); then
@@ -64,7 +114,6 @@ wait_for_stable_file() {
   return 1
 }
 
-# Copy image to pasteboard. No System Events (no Automation TCC).
 put_image_on_clipboard() {
   local file="$1"
   [[ -f "$file" ]] || return 1
@@ -150,15 +199,28 @@ mark_processed() {
   mv -f "${STATE_FILE}.tmp" "$STATE_FILE"
 }
 
+# Only process files modified in the last N minutes (avoid re-eating old Desktop junk)
+is_recent() {
+  local file="$1"
+  local mtime now age
+  mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
+  now=$(date +%s)
+  age=$(( now - mtime ))
+  (( age >= 0 && age < 600 ))  # 10 minutes
+}
+
 process_file() {
   local src="$1"
+  # strip trailing CR if any from AppleScript
+  src=${src%$'\r'}
   [[ -f "$src" ]] || return 0
 
   local name
   name=$(basename -- "$src")
 
   is_screenshot_name "$name" || { log "Skip (name): $name"; return 0; }
-  already_processed "$name" && { log "Skip (done): $name"; return 0; }
+  already_processed "$name" && return 0
+  is_recent "$src" || { log "Skip (old): $name"; return 0; }
 
   if ! wait_for_stable_file "$src"; then
     log "Skip (unstable/missing): $name"
@@ -191,20 +253,28 @@ process_file() {
 
 # === Main ===
 
-log "Run (inbox: $INBOX_DIR)"
+WATCH_DIR=$(get_ss_location)
+log "Run (watch: $WATCH_DIR)"
 
-# Inbox is intentionally outside Desktop/Documents (TCC blocks launchd there).
 typeset -a candidates
 candidates=()
 local_line=
 while IFS= read -r local_line; do
+  local_line=${local_line%$'\r'}
   [[ -n "$local_line" && -f "$local_line" ]] && candidates+=("$local_line")
 done <<EOF
-$(find "$INBOX_DIR" -maxdepth 1 -type f \( \
-    -name 'Screenshot*' -o -name 'screenshot*' -o \
-    -name 'Screen Shot*' -o -name 'Screen shot*' \
-  \) -print 2>/dev/null || true)
+$(list_screenshots "$WATCH_DIR")
 EOF
+
+# If macOS location isn't Desktop but user still has strays / dual paths, also check Desktop
+if [[ "$WATCH_DIR" != "$HOME/Desktop" ]]; then
+  while IFS= read -r local_line; do
+    local_line=${local_line%$'\r'}
+    [[ -n "$local_line" && -f "$local_line" ]] && candidates+=("$local_line")
+  done <<EOF
+$(list_screenshots "$HOME/Desktop")
+EOF
+fi
 
 log "Candidates: ${#candidates[@]}"
 
