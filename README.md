@@ -4,15 +4,13 @@
   <img src="assets/banner.jpg" alt="clipboard-screenshot — macOS screenshots to clipboard" width="100%">
 </p>
 
-**New macOS screenshots land on your clipboard automatically.** Files stay where macOS saved them (Desktop by default). No archive folder, no cloud, no Homebrew.
+**Every new macOS screenshot is copied to your clipboard automatically.**
 
 `⌘⇧3` / `⌘⇧4` → `⌘V`
 
-## Why this exists
+macOS won’t save a file **and** put the image on the clipboard at the same time. This fills that gap: your normal screenshot shortcuts still save a file; this tool immediately copies that image so you can paste.
 
-macOS can save screenshots to a file **or** the clipboard (`⌘⌃⇧3` / `⌘⌃⇧4`) — not both. This tool watches for new screenshot files and copies them to the pasteboard so you still get a Desktop file **and** an instant paste.
-
-Zero dependencies: `launchd`, `zsh`, and `osascript` only.
+Zero dependencies — `launchd`, `zsh`, and `osascript` only.
 
 ## Install
 
@@ -22,17 +20,7 @@ cd clipboard-screenshot
 ./install.sh
 ```
 
-If macOS asks to allow **Clipboard Screenshot → System Events**, click **OK** (needed to list Desktop under TCC).
-
-### What install does
-
-| Action | Detail |
-|---|---|
-| Launch agent | `com.stevederico.clipboard-screenshot` via `WatchPaths` on your screenshot folder |
-| App name | **Clipboard Screenshot** (not “zsh” in Login Items) |
-| Floating thumbnail | **Turned off** so the PNG is written immediately (see below) |
-| Screenshot location | **Unchanged** — still Desktop (or whatever you set) |
-| Files | **Not moved** — stay where macOS put them |
+If macOS asks to allow **Clipboard Screenshot → System Events**, click **OK** (needed to see new files on the Desktop under TCC).
 
 ### Uninstall
 
@@ -40,24 +28,21 @@ If macOS asks to allow **Clipboard Screenshot → System Events**, click **OK** 
 ./uninstall.sh
 ```
 
-Removes the agent and support files; restores your previous floating-thumbnail setting. Does not delete Desktop screenshots.
-
 ## How it works
 
-1. **launchd `WatchPaths`** — FSEvents-backed. Kernel notifies when your screenshot folder changes. No poll loop.
-2. **System Events** lists the newest `Screenshot*` file (launchd cannot `readdir` Desktop under TCC).
-3. Waits until the file is **newer than the last copy** and size-stable (avoids pasting the previous shot).
-4. Copies PNG to the general pasteboard via JXA/`osascript`.
-5. Optional notification: **Screenshot Ready**.
+1. **launchd `WatchPaths`** fires when a new screenshot file appears (FSEvents, not a poll loop).
+2. Finds the newest `Screenshot*` / `Screen Shot*` file.
+3. Copies the PNG to the system pasteboard.
+4. Optional notification: **Screenshot Ready**.
 
 ### Floating thumbnail
 
-The bottom-right screenshot preview **defers writing the file to disk** until it dismisses. There is no public API for that in-memory preview, so install disables `show-thumbnail`. Uninstall restores your prior setting.
+Install turns off the bottom-right screenshot preview. That UI **delays writing the file to disk**, so the clipboard can’t update until it disappears — and there’s no public API for the preview buffer. Uninstall restores your previous setting.
 
 ```bash
-# re-enable manually if you want
+# turn the preview back on yourself
 defaults write com.apple.screencapture show-thumbnail -bool true
-killall SystemUIServer   # or log out/in
+killall SystemUIServer
 ```
 
 ## Control
@@ -70,28 +55,21 @@ tail -f ~/Library/Application\ Support/com.stevederico.clipboard-screenshot/watc
 launchctl bootout gui/$(id -u)/com.stevederico.clipboard-screenshot
 
 # Start again
-cd clipboard-screenshot && ./install.sh
+./install.sh
 ```
 
-Support files live under:
-
-```text
-~/Library/Application Support/com.stevederico.clipboard-screenshot/
-```
+Agent: **Clipboard Screenshot** (`com.stevederico.clipboard-screenshot`)  
+Support files: `~/Library/Application Support/com.stevederico.clipboard-screenshot/`
 
 ## Requirements
 
 - macOS (tested on Sequoia)
 - Automation permission for System Events when prompted
-- Default screenshot names (`Screenshot …` / `Screen Shot …`)
+- Default screenshot filenames (`Screenshot …` / `Screen Shot …`)
 
-## Not this tool
+## Built-in alternative
 
-| Want | Use instead |
-|---|---|
-| Clipboard only, no file | `⌘⌃⇧3` / `⌘⌃⇧4` (built-in) |
-| Move/archive off Desktop | Not in scope — this leaves files put |
-| Cross-platform | macOS only |
+Clipboard only, no file: `⌘⌃⇧3` / `⌘⌃⇧4`.
 
 ## License
 

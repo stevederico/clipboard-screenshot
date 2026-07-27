@@ -51,4 +51,4 @@ rmdir "$LEGACY_SS_DIR/Incoming" 2>/dev/null || true
 echo "    Removed app + support files"
 
 echo
-echo "Uninstalled. Your Desktop screenshots were not deleted."
+echo "Uninstalled."

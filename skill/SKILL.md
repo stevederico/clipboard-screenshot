@@ -1,26 +1,20 @@
 ---
 name: screenshots
-description: macOS screenshots land on the clipboard automatically. Use when the user mentions a recent screenshot, "what I just captured", or wants to paste/discuss the latest capture.
+description: macOS screenshots are copied to the clipboard automatically by clipboard-screenshot. Use when the user mentions a recent screenshot, pasting a capture, or "what I just captured".
 ---
 
 # Screenshots (clipboard)
 
-`clipboard-screenshot` copies each new screenshot to the system clipboard. **Files stay on Desktop** (or whatever macOS save location the user set). Nothing is archived.
+`clipboard-screenshot` puts each new screenshot on the system clipboard so the user can `⌘V` right away.
 
-## Usage
+## Behavior
 
 1. User takes `⌘⇧3` / `⌘⇧4`
-2. After a moment they can `⌘V` (image is on the clipboard)
-3. File remains where macOS saved it — typically `~/Desktop/Screenshot ….png`
+2. Image is on the clipboard within a moment
+3. The file is whatever macOS already saved (location unchanged by this tool)
 
 ## Logs
 
 ```bash
 tail -f ~/Library/Application\ Support/com.stevederico.clipboard-screenshot/watcher.log
-```
-
-## Recent files on Desktop
-
-```bash
-ls -1t ~/Desktop/Screenshot* 2>/dev/null | head -10
 ```

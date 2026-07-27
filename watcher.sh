@@ -1,11 +1,9 @@
 #!/bin/zsh
-# clipboard-screenshot — copy new screenshots to the clipboard (files stay put).
-# Triggered by launchd WatchPaths (FS event).
-# Zero deps: zsh + osascript + launchd.
+# clipboard-screenshot — copy new screenshots to the clipboard.
+# Triggered by launchd WatchPaths (FS event). Zero deps: zsh + osascript + launchd.
 #
-# Race we fix: WatchPaths often fires BEFORE the new PNG is visible to
-# System Events. Naively copying "newest" then re-pastes the *previous*
-# shot (or leaves it on the clipboard). We wait for mtime > last success.
+# Race: WatchPaths can fire before the new PNG is visible to System Events.
+# We only copy when mtime > last success so the previous shot is never re-pasted.
 
 set -euo pipefail
 setopt NULL_GLOB EXTENDED_GLOB

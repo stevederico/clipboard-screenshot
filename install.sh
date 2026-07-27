@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Installer for clipboard-screenshot
-# Clipboard only — does not move screenshots or change save location.
+# Copies new screenshots to the clipboard.
 
 set -euo pipefail
 setopt NULL_GLOB
@@ -19,7 +19,7 @@ UID_NUM=$(id -u)
 DOMAIN="gui/${UID_NUM}"
 LEGACY_SS_DIR="$HOME/Screenshots"
 
-echo "==> Installing ${APP_NAME} (clipboard only — files stay put)"
+echo "==> Installing ${APP_NAME}"
 
 mkdir -p "$SUPPORT_DIR" "$HOME/Desktop"
 chmod 755 "$SUPPORT_DIR"
@@ -60,7 +60,7 @@ rm -f "$LEGACY_SS_DIR/watcher.sh" "$LEGACY_SS_DIR/watcher.log" \
 rmdir "$LEGACY_SS_DIR/.watcher.lock" 2>/dev/null || true
 rmdir "$LEGACY_SS_DIR/Incoming" 2>/dev/null || true
 
-echo "==> Screenshot location: $CURRENT_LOC (unchanged by this tool)"
+echo "==> Watching screenshot location: $CURRENT_LOC"
 
 # Floating thumbnail (bottom-right) DELAYS writing the PNG to disk until it
 # dismisses — so clipboard can't update until then. No public API to the
@@ -208,7 +208,7 @@ echo "App:     $APP_BUNDLE"
 echo "Trigger: WatchPaths on ${watch_paths[*]} (FS event — not polling)"
 echo "Logs:    $SUPPORT_DIR/watcher.log"
 echo
-echo "Screenshots stay put. New ones → clipboard (immediate — no thumbnail wait)."
+echo "New screenshots → clipboard automatically."
 echo "If asked: allow Automation for “${APP_NAME}” → System Events."
 echo
 echo "Stop:      launchctl bootout ${DOMAIN}/${LABEL}"
