@@ -1,11 +1,7 @@
 #!/bin/zsh
-# clipboard-screenshot
-# launchd agent: put new macOS screenshots on the clipboard.
-# Leaves files where macOS saved them (usually Desktop). No archive folder.
-# Zero dependencies: zsh + osascript + launchd.
-#
-# Listing Desktop: launchd cannot readdir ~/Desktop (TCC). System Events can.
-# open/stat of a known path still works.
+# clipboard-screenshot — put new screenshots on the clipboard (files stay put).
+# Fast path: long-running poll (KeepAlive), newest file only, one clipboard write.
+# Zero deps: zsh + osascript + launchd.
 
 set -euo pipefail
 setopt NULL_GLOB EXTENDED_GLOB
@@ -16,15 +12,19 @@ mkdir -p "$SUPPORT_DIR"
 STATE_FILE="$SUPPORT_DIR/last-processed"
 LOG_FILE="$SUPPORT_DIR/watcher.log"
 LOCK_DIR="$SUPPORT_DIR/watcher.lock"
+POLL_SEC="${CLIPBOARD_SCREENSHOT_POLL:-0.25}"
+DAEMON=0
+[[ "${1:-}" == "--daemon" ]] && DAEMON=1
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
 }
 
+# Single instance
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   if [[ -d "$LOCK_DIR" ]]; then
     lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ))
-    if (( lock_age > 30 )); then
+    if (( lock_age > 60 )); then
       rmdir "$LOCK_DIR" 2>/dev/null || true
       mkdir "$LOCK_DIR" 2>/dev/null || exit 0
     else
@@ -44,127 +44,89 @@ get_ss_location() {
   [[ -d "$loc" ]] && echo "$loc" || echo "$HOME/Desktop"
 }
 
-list_screenshots() {
+# One System Events call: newest Screenshot* path only (by modification date).
+newest_screenshot() {
   local dir="$1"
-
   osascript - "$dir" <<'APPLESCRIPT' 2>/dev/null || true
 on run argv
   set dirPath to item 1 of argv
-  set out to {}
   try
     tell application "System Events"
       set theFolder to folder dirPath
-      set theFiles to every file of theFolder
-      repeat with f in theFiles
-        set n to name of f as text
-        if n starts with "Screenshot" or n starts with "Screen Shot" or n starts with "screenshot" or n starts with "screen shot" then
-          set end of out to POSIX path of f
+      set shots to every file of theFolder whose name starts with "Screenshot" or name starts with "Screen Shot"
+      if (count of shots) is 0 then return ""
+      set best to item 1 of shots
+      set bestDate to modification date of best
+      repeat with f in shots
+        set d to modification date of f
+        if d > bestDate then
+          set bestDate to d
+          set best to f
         end if
       end repeat
+      return POSIX path of best
     end tell
   on error
     return ""
   end try
-  set AppleScript's text item delimiters to linefeed
-  return out as text
 end run
 APPLESCRIPT
 }
 
-wait_for_stable_file() {
-  local file="$1"
-  local max_wait=40
-  local last_size=-1
-  local stable=0
-  local i size
-
-  for i in {1..$max_wait}; do
-    [[ -f "$file" ]] || { sleep 0.25; continue; }
-    size=$(stat -f %z "$file" 2>/dev/null || echo 0)
-    if (( size > 4096 )); then
-      if (( size == last_size )); then
-        (( ++stable ))
-        if (( stable >= 2 )); then
-          return 0
-        fi
-      else
-        stable=0
-        last_size=$size
-      fi
-    fi
-    sleep 0.25
-  done
-  return 1
+# Ready enough: exists and >4KB. One short retry if still tiny (write in progress).
+file_ready() {
+  local file="$1" size
+  [[ -f "$file" ]] || return 1
+  size=$(stat -f %z "$file" 2>/dev/null || echo 0)
+  if (( size > 4096 )); then
+    return 0
+  fi
+  sleep 0.08
+  [[ -f "$file" ]] || return 1
+  size=$(stat -f %z "$file" 2>/dev/null || echo 0)
+  (( size > 4096 ))
 }
 
+# Single fast clipboard write (JXA / AppKit — no System Events, no retries by default)
 put_image_on_clipboard() {
   local file="$1"
   [[ -f "$file" ]] || return 1
 
-  local max_attempts=4
-  local delay=0.4
-  local attempt out
+  local out
+  out=$(osascript -l JavaScript - "$file" <<'JXA' 2>&1
+function run(argv) {
+  ObjC.import("AppKit");
+  ObjC.import("Foundation");
+  var data = $.NSData.dataWithContentsOfFile(argv[0]);
+  if (!data || data.length === 0) return "fail:read";
+  var pb = $.NSPasteboard.generalPasteboard;
+  pb.clearContents;
+  return pb.setDataForType(data, $.NSPasteboardTypePNG) ? "ok" : "fail:set";
+}
+JXA
+)
+  if [[ "$out" == "ok" ]]; then
+    return 0
+  fi
 
-  for attempt in {1..$max_attempts}; do
-    out=$(osascript - "$file" <<'APPLESCRIPT' 2>&1
+  # Fallback once
+  out=$(osascript - "$file" <<'APPLESCRIPT' 2>&1
 on run argv
-  set p to item 1 of argv
   try
-    set the clipboard to (read (POSIX file p) as «class PNGf»)
+    set the clipboard to (read (POSIX file (item 1 of argv)) as «class PNGf»)
     return "ok"
-  on error errMsg number errNum
-    return "fail:" & errNum & ":" & errMsg
+  on error errMsg
+    return "fail:" & errMsg
   end try
 end run
 APPLESCRIPT
 )
-
-    if [[ "$out" == "ok" ]]; then
-      return 0
-    fi
-
-    out=$(osascript -l JavaScript - "$file" <<'JXA' 2>&1
-function run(argv) {
-  ObjC.import("AppKit");
-  ObjC.import("Foundation");
-  var path = argv[0];
-  var data = $.NSData.dataWithContentsOfFile(path);
-  if (!data || data.length === 0) return "fail:read";
-  var pb = $.NSPasteboard.generalPasteboard;
-  pb.clearContents;
-  var ok = pb.setDataForType(data, $.NSPasteboardTypePNG);
-  return ok ? "ok" : "fail:set";
-}
-JXA
-)
-
-    if [[ "$out" == "ok" ]]; then
-      return 0
-    fi
-
-    log "Clipboard attempt $attempt failed: $out"
-    if (( attempt < max_attempts )); then
-      sleep $delay
-    fi
-  done
-
-  return 1
+  [[ "$out" == "ok" ]]
 }
 
-show_notification() {
-  local title="$1"
-  local message="$2"
-  title=${title//\\/\\\\}
-  title=${title//\"/\\\"}
-  message=${message//\\/\\\\}
-  message=${message//\"/\\\"}
-  osascript -e "display notification \"$message\" with title \"$title\" sound name \"Glass\"" 2>/dev/null || true
-}
-
-is_screenshot_name() {
-  local name="$1"
-  [[ "$name" == (#i)Screenshot*.(png|jpg|jpeg|heic) ]] || \
-  [[ "$name" == (#i)Screen\ Shot*.(png|jpg|jpeg|heic) ]]
+notify() {
+  # Don't block the hot path on notification
+  osascript -e "display notification \"$2\" with title \"$1\"" &>/dev/null &
 }
 
 already_processed() {
@@ -177,93 +139,55 @@ mark_processed() {
   local name="$1"
   {
     echo "$name"
-    grep -Fvx -- "$name" "$STATE_FILE" 2>/dev/null | head -50 || true
+    grep -Fvx -- "$name" "$STATE_FILE" 2>/dev/null | head -20 || true
   } > "${STATE_FILE}.tmp"
   mv -f "${STATE_FILE}.tmp" "$STATE_FILE"
 }
 
 is_recent() {
-  local file="$1"
-  local mtime now age
+  local file="$1" mtime now
   mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
   now=$(date +%s)
-  age=$(( now - mtime ))
-  (( age >= 0 && age < 600 ))
+  # Only brand-new captures (2 min) — avoids re-touching old Desktop shots
+  (( now - mtime >= 0 && now - mtime < 120 ))
 }
 
-process_file() {
-  local src="$1"
-  src=${src%$'\r'}
-  [[ -f "$src" ]] || return 0
+tick() {
+  local watch src name
 
-  local name
-  name=$(basename -- "$src")
+  watch=$(get_ss_location)
+  src=$(newest_screenshot "$watch")
+  src=${src//$'\r'/}
+  src=${src//$'\n'/}
 
-  is_screenshot_name "$name" || return 0
-  already_processed "$name" && return 0
-  is_recent "$src" || return 0
-
-  if ! wait_for_stable_file "$src"; then
-    log "Skip (unstable): $name"
+  if [[ -z "$src" || ! -f "$src" ]]; then
     return 0
   fi
 
-  [[ -f "$src" ]] || return 0
+  name=$(basename -- "$src")
+  already_processed "$name" && return 0
+  is_recent "$src" || return 0
+  file_ready "$src" || return 0
   already_processed "$name" && return 0
 
-  # Leave the file where it is — clipboard only
   if put_image_on_clipboard "$src"; then
     mark_processed "$name"
-    log "On clipboard (left in place): $name"
-    show_notification "Screenshot Ready" "Cmd+V to paste"
+    log "clipboard: $name"
+    notify "Screenshot Ready" "Cmd+V to paste"
   else
-    log "Clipboard failed: $name"
-    show_notification "Screenshot" "Clipboard copy failed"
+    log "clipboard failed: $name"
   fi
 }
 
-# === Main ===
-
-WATCH_DIR=$(get_ss_location)
-log "Run (watch: $WATCH_DIR)"
-
-typeset -a candidates
-candidates=()
-local_line=
-while IFS= read -r local_line; do
-  local_line=${local_line%$'\r'}
-  [[ -n "$local_line" && -f "$local_line" ]] && candidates+=("$local_line")
-done <<EOF
-$(list_screenshots "$WATCH_DIR")
-EOF
-
-if [[ "$WATCH_DIR" != "$HOME/Desktop" ]]; then
-  while IFS= read -r local_line; do
-    local_line=${local_line%$'\r'}
-    [[ -n "$local_line" && -f "$local_line" ]] && candidates+=("$local_line")
-  done <<EOF
-$(list_screenshots "$HOME/Desktop")
-EOF
+if (( DAEMON )); then
+  log "daemon start (poll ${POLL_SEC}s)"
+  # Small initial delay so launchd finishes bootstrap
+  sleep 0.1
+  while true; do
+    tick || true
+    sleep "$POLL_SEC"
+  done
+else
+  # One-shot (manual / install warm-up)
+  tick || true
 fi
-
-log "Candidates: ${#candidates[@]}"
-
-if (( ${#candidates[@]} == 0 )); then
-  exit 0
-fi
-
-typeset -a sorted
-sorted=()
-while IFS= read -r local_line; do
-  [[ -n "$local_line" ]] && sorted+=("$local_line")
-done <<EOF
-$(
-  for p in "${candidates[@]}"; do
-    printf '%s\t%s\n' "$(stat -f %m "$p" 2>/dev/null || echo 0)" "$p"
-  done | sort -rn | cut -f2-
-)
-EOF
-
-for f in "${sorted[@]}"; do
-  process_file "$f"
-done

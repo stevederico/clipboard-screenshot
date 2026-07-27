@@ -12,11 +12,11 @@ cd clipboard-screenshot
 ./install.sh
 ```
 
-`⌘⇧3` / `⌘⇧4` → wait a beat → `⌘V`.
+`⌘⇧3` / `⌘⇧4` → `⌘V` (usually within ~0.5s).
 
 ## Details
 
-- Agent name: **Clipboard Screenshot** (`com.stevederico.clipboard-screenshot`)
+- Agent: **Clipboard Screenshot** (always-on poll, not slow WatchPaths cold-start)
 - Support files: `~/Library/Application Support/com.stevederico.clipboard-screenshot/`
 - May prompt once: Automation for System Events (needed to see Desktop under TCC)
 
