@@ -1,6 +1,6 @@
 #!/bin/zsh
-# clipboard-screenshot — put new screenshots on the clipboard (files stay put).
-# Fast path: long-running poll (KeepAlive), newest file only, one clipboard write.
+# clipboard-screenshot — copy new screenshots to the clipboard (files stay put).
+# Triggered by launchd WatchPaths (FS event), not a poll loop.
 # Zero deps: zsh + osascript + launchd.
 
 set -euo pipefail
@@ -12,19 +12,16 @@ mkdir -p "$SUPPORT_DIR"
 STATE_FILE="$SUPPORT_DIR/last-processed"
 LOG_FILE="$SUPPORT_DIR/watcher.log"
 LOCK_DIR="$SUPPORT_DIR/watcher.lock"
-POLL_SEC="${CLIPBOARD_SCREENSHOT_POLL:-0.25}"
-DAEMON=0
-[[ "${1:-}" == "--daemon" ]] && DAEMON=1
 
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
 }
 
-# Single instance
+# Serialize overlapping WatchPaths fires
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   if [[ -d "$LOCK_DIR" ]]; then
     lock_age=$(( $(date +%s) - $(stat -f %m "$LOCK_DIR" 2>/dev/null || echo 0) ))
-    if (( lock_age > 60 )); then
+    if (( lock_age > 15 )); then
       rmdir "$LOCK_DIR" 2>/dev/null || true
       mkdir "$LOCK_DIR" 2>/dev/null || exit 0
     else
@@ -44,7 +41,7 @@ get_ss_location() {
   [[ -d "$loc" ]] && echo "$loc" || echo "$HOME/Desktop"
 }
 
-# One System Events call: newest Screenshot* path only (by modification date).
+# System Events: newest Screenshot* (launchd cannot readdir Desktop under TCC)
 newest_screenshot() {
   local dir="$1"
   osascript - "$dir" <<'APPLESCRIPT' 2>/dev/null || true
@@ -73,7 +70,6 @@ end run
 APPLESCRIPT
 }
 
-# Ready enough: exists and >4KB. One short retry if still tiny (write in progress).
 file_ready() {
   local file="$1" size
   [[ -f "$file" ]] || return 1
@@ -81,18 +77,17 @@ file_ready() {
   if (( size > 4096 )); then
     return 0
   fi
-  sleep 0.08
+  # File may still be writing — one short retry (event can beat the write)
+  sleep 0.05
   [[ -f "$file" ]] || return 1
   size=$(stat -f %z "$file" 2>/dev/null || echo 0)
   (( size > 4096 ))
 }
 
-# Single fast clipboard write (JXA / AppKit — no System Events, no retries by default)
 put_image_on_clipboard() {
-  local file="$1"
+  local file="$1" out
   [[ -f "$file" ]] || return 1
 
-  local out
   out=$(osascript -l JavaScript - "$file" <<'JXA' 2>&1
 function run(argv) {
   ObjC.import("AppKit");
@@ -109,7 +104,6 @@ JXA
     return 0
   fi
 
-  # Fallback once
   out=$(osascript - "$file" <<'APPLESCRIPT' 2>&1
 on run argv
   try
@@ -125,7 +119,6 @@ APPLESCRIPT
 }
 
 notify() {
-  # Don't block the hot path on notification
   osascript -e "display notification \"$2\" with title \"$1\"" &>/dev/null &
 }
 
@@ -148,46 +141,35 @@ is_recent() {
   local file="$1" mtime now
   mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
   now=$(date +%s)
-  # Only brand-new captures (2 min) — avoids re-touching old Desktop shots
   (( now - mtime >= 0 && now - mtime < 120 ))
 }
 
-tick() {
-  local watch src name
+# WatchPaths can fire slightly before the PNG is fully written — brief rechecks.
+try_copy_newest() {
+  local watch src name attempt
 
   watch=$(get_ss_location)
-  src=$(newest_screenshot "$watch")
-  src=${src//$'\r'/}
-  src=${src//$'\n'/}
+  for attempt in 1 2 3 4 5; do
+    src=$(newest_screenshot "$watch")
+    src=${src//$'\r'/}
+    src=${src//$'\n'/}
 
-  if [[ -z "$src" || ! -f "$src" ]]; then
-    return 0
-  fi
-
-  name=$(basename -- "$src")
-  already_processed "$name" && return 0
-  is_recent "$src" || return 0
-  file_ready "$src" || return 0
-  already_processed "$name" && return 0
-
-  if put_image_on_clipboard "$src"; then
-    mark_processed "$name"
-    log "clipboard: $name"
-    notify "Screenshot Ready" "Cmd+V to paste"
-  else
-    log "clipboard failed: $name"
-  fi
+    if [[ -n "$src" && -f "$src" ]]; then
+      name=$(basename -- "$src")
+      if ! already_processed "$name" && is_recent "$src" && file_ready "$src"; then
+        if put_image_on_clipboard "$src"; then
+          mark_processed "$name"
+          log "clipboard: $name"
+          notify "Screenshot Ready" "Cmd+V to paste"
+          return 0
+        fi
+        log "clipboard failed: $name"
+        return 1
+      fi
+    fi
+    sleep 0.1
+  done
+  return 0
 }
 
-if (( DAEMON )); then
-  log "daemon start (poll ${POLL_SEC}s)"
-  # Small initial delay so launchd finishes bootstrap
-  sleep 0.1
-  while true; do
-    tick || true
-    sleep "$POLL_SEC"
-  done
-else
-  # One-shot (manual / install warm-up)
-  tick || true
-fi
+try_copy_newest || true

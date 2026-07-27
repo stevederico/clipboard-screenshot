@@ -12,13 +12,25 @@ cd clipboard-screenshot
 ./install.sh
 ```
 
-`⌘⇧3` / `⌘⇧4` → `⌘V` (usually within ~0.5s).
+`⌘⇧3` / `⌘⇧4` → `⌘V`.
+
+## Trigger (not a poll loop)
+
+macOS has no public “screenshot taken” API. What exists:
+
+| Mechanism | What it is |
+|---|---|
+| **launchd `WatchPaths`** | FSEvents-backed — kernel tells launchd the folder changed. **This is what we use.** |
+| FSEvents (C/Swift) | Same events, lower level; needs a compiled binary |
+| Folder Actions | Finder-side hooks; flaky on modern macOS |
+
+We run once per Desktop change, copy the newest `Screenshot*`, exit. No 0.25s spin loop.
 
 ## Details
 
-- Agent: **Clipboard Screenshot** (always-on poll, not slow WatchPaths cold-start)
+- Agent: **Clipboard Screenshot** (`com.stevederico.clipboard-screenshot`)
 - Support files: `~/Library/Application Support/com.stevederico.clipboard-screenshot/`
-- May prompt once: Automation for System Events (needed to see Desktop under TCC)
+- May prompt once: Automation → System Events (list Desktop under TCC)
 
 ```bash
 tail -f ~/Library/Application\ Support/com.stevederico.clipboard-screenshot/watcher.log

@@ -84,9 +84,9 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.4.0</string>
+    <string>1.5.0</string>
     <key>CFBundleVersion</key>
-    <string>1.4.0</string>
+    <string>1.5.0</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
@@ -107,7 +107,18 @@ mkdir -p "$LAUNCH_AGENTS"
 launchctl bootout "${DOMAIN}/${OLD_LABEL}" 2>/dev/null || true
 rm -f "$OLD_PLIST"
 
-# Always-on daemon (poll) — avoids launchd cold-start + WatchPaths lag per shot
+# Event-driven: launchd WatchPaths = FSEvents under the hood (no poll loop)
+watch_paths=("$CURRENT_LOC")
+if [[ "$CURRENT_LOC" != "$HOME/Desktop" ]]; then
+  watch_paths+=("$HOME/Desktop")
+fi
+
+WATCH_XML=""
+for p in "${watch_paths[@]}"; do
+  WATCH_XML+="        <string>${p}</string>
+"
+done
+
 cat > "$PLIST_DEST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -119,16 +130,22 @@ cat > "$PLIST_DEST" <<EOF
     <key>ProgramArguments</key>
     <array>
         <string>${APP_EXEC}</string>
-        <string>--daemon</string>
     </array>
 
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
+    <key>WatchPaths</key>
+    <array>
+${WATCH_XML}    </array>
 
     <key>ThrottleInterval</key>
-    <integer>1</integer>
+    <integer>0</integer>
+
+    <key>ExitTimeOut</key>
+    <integer>15</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+    <key>KeepAlive</key>
+    <false/>
 
     <key>LimitLoadToSessionType</key>
     <string>Aqua</string>
@@ -144,8 +161,6 @@ cat > "$PLIST_DEST" <<EOF
         <string>${HOME}</string>
         <key>CLIPBOARD_SCREENSHOT_HOME</key>
         <string>${SUPPORT_DIR}</string>
-        <key>CLIPBOARD_SCREENSHOT_POLL</key>
-        <string>0.25</string>
     </dict>
 
     <key>StandardOutPath</key>
@@ -165,25 +180,17 @@ launchctl unload "$PLIST_DEST" 2>/dev/null || true
 
 if launchctl bootstrap "$DOMAIN" "$PLIST_DEST" 2>/dev/null; then
   launchctl enable "${DOMAIN}/${LABEL}" 2>/dev/null || true
-  echo "==> Bootstrapped daemon (${DOMAIN}/${LABEL})"
+  echo "==> Bootstrapped WatchPaths agent (${DOMAIN}/${LABEL})"
 else
   launchctl load -w "$PLIST_DEST"
 fi
 
-# Confirm it's running
-sleep 0.3
-if launchctl print "${DOMAIN}/${LABEL}" 2>/dev/null | grep -q 'state = running'; then
-  echo "==> Daemon running (poll 0.25s)"
-else
-  echo "==> Warning: daemon may not be running — check: launchctl print ${DOMAIN}/${LABEL}"
-fi
-
 echo
 echo "App:     $APP_BUNDLE"
-echo "Watch:   $CURRENT_LOC (poll, files stay put)"
+echo "Trigger: WatchPaths on ${watch_paths[*]} (FS event — not polling)"
 echo "Logs:    $SUPPORT_DIR/watcher.log"
 echo
-echo "Screenshots stay where macOS saves them. New ones land on the clipboard."
+echo "Screenshots stay put. New ones → clipboard."
 echo "If asked: allow Automation for “${APP_NAME}” → System Events."
 echo
 echo "Stop:      launchctl bootout ${DOMAIN}/${LABEL}"
