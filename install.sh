@@ -102,9 +102,9 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.6.0</string>
+    <string>1.7.0</string>
     <key>CFBundleVersion</key>
-    <string>1.6.0</string>
+    <string>1.7.0</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
@@ -209,7 +209,7 @@ echo "Trigger: WatchPaths on ${watch_paths[*]} (FS event — not polling)"
 echo "Logs:    $SUPPORT_DIR/watcher.log"
 echo
 echo "New screenshots → clipboard automatically."
-echo "If asked: allow Automation for “${APP_NAME}” → System Events."
+echo "No Full Disk Access required (resolves files via mdfind under TCC)."
 echo
 echo "Stop:      launchctl bootout ${DOMAIN}/${LABEL}"
 echo "Uninstall: cd $(pwd) && ./uninstall.sh"

@@ -20,7 +20,7 @@ cd clipboard-screenshot
 ./install.sh
 ```
 
-If macOS asks to allow **Clipboard Screenshot → System Events**, click **OK** (needed to list your screenshot folder under TCC).
+No Full Disk Access. The agent finds new shots via Spotlight (`mdfind`) so it can watch Desktop under TCC without listing the folder.
 
 ### Uninstall
 
@@ -34,8 +34,8 @@ Stops the agent, removes support files, and restores your previous floating-thum
 
 1. **launchd `WatchPaths`** — runs when your screenshot folder changes (FSEvents; not a poll loop).
 2. Watches `defaults read com.apple.screencapture location` (Desktop by default).
-3. Picks the newest file named `Screenshot*` / `Screen Shot*` that is newer than the last successful copy.
-4. Copies it to the pasteboard as **PNG** (via JXA / `osascript`).
+3. Resolves the newest `Screenshot*` / `Screen Shot*` via **`mdfind`** (launchd cannot `readdir` Desktop under TCC; no FDA).
+4. Copies it to the pasteboard as **PNG** (via JXA / `osascript`) when mtime is newer than the last successful copy.
 5. Notification: **Screenshot Ready** · Cmd+V to paste.
 
 ### Floating thumbnail
@@ -69,7 +69,7 @@ launchctl bootout gui/$(id -u)/com.stevederico.clipboard-screenshot
 ## Requirements
 
 - macOS (tested on Sequoia)
-- Automation permission for System Events when prompted
+- Spotlight indexing on (default) — used to resolve Desktop paths under TCC
 - Default screenshot **names** (`Screenshot …` / `Screen Shot …`)
 - Screenshot **type** PNG (macOS default) — clipboard copy uses PNG pasteboard data
 

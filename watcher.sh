@@ -2,7 +2,7 @@
 # clipboard-screenshot — copy new screenshots to the clipboard.
 # Triggered by launchd WatchPaths (FS event). Zero deps: zsh + osascript + launchd.
 #
-# Race: WatchPaths can fire before the new PNG is visible to System Events.
+# Race: WatchPaths can fire before the new PNG is fully written.
 # We only copy when mtime > last success so the previous shot is never re-pasted.
 
 set -euo pipefail
@@ -48,10 +48,39 @@ get_ss_location() {
   [[ -d "$loc" ]] && echo "$loc" || echo "$HOME/Desktop"
 }
 
-# Newest Screenshot* path via System Events (TCC-safe Desktop listing)
+# Pick newest Screenshot* by mtime.
+# launchd cannot readdir ~/Desktop (TCC → Operation not permitted). No FDA needed:
+# - mdfind (Spotlight) can resolve paths under Desktop
+# - open-by-absolute-path + stat still work once we have the path
+# FS glob works for non-TCC folders (custom screencapture location).
+# System Events only if Automation was already granted (optional).
 newest_screenshot() {
-  local dir="$1"
-  osascript - "$dir" <<'APPLESCRIPT' 2>/dev/null || true
+  local dir="$1" best="" best_m=0 f m se
+  local -a candidates
+
+  while IFS= read -r f; do
+    [[ -n "$f" && -f "$f" ]] || continue
+    m=$(stat -f %m -- "$f" 2>/dev/null || echo 0)
+    if (( m > best_m )); then
+      best_m=$m
+      best=$f
+    fi
+  done < <(mdfind -onlyin "$dir" \
+    '(kMDItemFSName == "Screenshot*"c) || (kMDItemFSName == "Screen Shot*"c)' 2>/dev/null)
+
+  if [[ -z "$best" ]]; then
+    candidates=("$dir"/Screenshot*(N.) "$dir"/Screen\ Shot*(N.))
+    for f in "${candidates[@]}"; do
+      m=$(stat -f %m -- "$f" 2>/dev/null || echo 0)
+      if (( m > best_m )); then
+        best_m=$m
+        best=$f
+      fi
+    done
+  fi
+
+  if [[ -z "$best" ]]; then
+    se=$(osascript - "$dir" <<'APPLESCRIPT' 2>/dev/null || true
 on run argv
   set dirPath to item 1 of argv
   try
@@ -75,6 +104,13 @@ on run argv
   end try
 end run
 APPLESCRIPT
+)
+    se=${se//$'\r'/}
+    se=${se//$'\n'/}
+    [[ -n "$se" && -f "$se" ]] && best=$se
+  fi
+
+  print -r -- "$best"
 }
 
 # Size > 4KB and stable across two samples (avoid mid-write)
@@ -156,27 +192,31 @@ try_copy_new() {
     src=${src//$'\n'/}
 
     if [[ -n "$src" && -f "$src" ]]; then
-      mtime=$(stat -f %m "$src" 2>/dev/null || echo 0)
+      mtime=$(stat -f %m -- "$src" 2>/dev/null || echo 0)
       name=$(basename -- "$src")
 
       # Key: only touch clipboard when this file is newer than last copy
-      if (( mtime > last )) && file_ready "$src"; then
-        # Re-stat after ready (thumbnail may rewrite)
-        mtime=$(stat -f %m "$src" 2>/dev/null || echo 0)
-        if put_image_on_clipboard "$src"; then
-          mark_done "$name" "$mtime"
-          log "clipboard: $name (mtime=$mtime attempt=$attempt)"
-          notify "Screenshot Ready" "Cmd+V to paste"
-          return 0
+      if (( mtime > last )); then
+        if file_ready "$src"; then
+          # Re-stat after ready (thumbnail may rewrite)
+          mtime=$(stat -f %m -- "$src" 2>/dev/null || echo 0)
+          if put_image_on_clipboard "$src"; then
+            mark_done "$name" "$mtime"
+            log "clipboard: $name (mtime=$mtime attempt=$attempt)"
+            notify "Screenshot Ready" "Cmd+V to paste"
+            return 0
+          fi
+          log "clipboard failed: $name"
+          return 1
         fi
-        log "clipboard failed: $name"
-        return 1
+      elif (( attempt == 1 )); then
+        log "newest not newer: $name (mtime=$mtime last=$last)"
       fi
     fi
     sleep $delay
   done
 
-  log "no newer screenshot within timeout (last_mtime=$last)"
+  log "no newer screenshot within timeout (last_mtime=$last newest=${src:-none})"
   return 0
 }
 
